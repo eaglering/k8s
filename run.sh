@@ -4,25 +4,14 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-systemctl stop firewalld
-systemctl disable firewalld
-
-swapoff -a 
-sed -i 's/.*swap.*/#&/' /etc/fstab
-
-setenforce  0 
-sed -i "s/^SELINUX=enforcing/SELINUX=disabled/g" /etc/sysconfig/selinux 
-sed -i "s/^SELINUX=enforcing/SELINUX=disabled/g" /etc/selinux/config 
-sed -i "s/^SELINUX=permissive/SELINUX=disabled/g" /etc/sysconfig/selinux 
-sed -i "s/^SELINUX=permissive/SELINUX=disabled/g" /etc/selinux/config  
-
-modprobe br_netfilter
-cat <<EOF >  /etc/sysctl.d/k8s.conf
-net.bridge.bridge-nf-call-ip6tables = 1
-net.bridge.bridge-nf-call-iptables = 1
+# Set docker yum repo
+cat > /etc/yum.repos.d/docker.repo <<EOF
+[docker-repo]
+name=Docker Repository
+baseurl=http://mirrors.aliyun.com/docker-engine/yum/repo/main/centos/7
+enabled=1
+gpgcheck=0
 EOF
-sysctl -p /etc/sysctl.d/k8s.conf
-ls /proc/sys/net/bridge
 
 # Set kubernetes yum repo
 cat > /etc/yum.repos.d/kubernetes.repo <<EOF
@@ -35,89 +24,20 @@ EOF
 
 yum makecache
 
-yum install -y epel-release
-yum install -y wget ntpdate
+KUBE_VERSION=1.9.6
+KUBERNETES_CNI=0.6.0
+KUBE_PAUSE_VERSION=3.0
+ETCD_VERSION=3.1.11
+DNS_VERSION=1.14.7
+FLANNEL_VERSION=0.9.0
+DEFAULT_BACKEND_VERSION=1.4
+NGINX_INGRESS_CONTROLLER_VERSION=0.12.0
 
-mkdir -p /var/data/cron
-systemctl enable ntpdate.service
-echo '*/30 * * * * /usr/sbin/ntpdate time7.aliyun.com >/dev/null 2>&1' > /var/data/cron/crontab.1
-crontab /var/data/cron/crontab.1
-systemctl start ntpdate.service
- 
-echo "* soft nofile 65536" >> /etc/security/limits.conf
-echo "* hard nofile 65536" >> /etc/security/limits.conf
-echo "* soft nproc 65536"  >> /etc/security/limits.conf
-echo "* hard nproc 65536"  >> /etc/security/limits.conf
-echo "* soft  memlock  unlimited"  >> /etc/security/limits.conf
-echo "* hard memlock  unlimited"  >> /etc/security/limits.conf
-
-#Installing Docker
-yum install -y docker
+yum install -y wget docker kubeadm-${KUBE_VERSION}-0.x86_64 kubectl-${KUBE_VERSION}-0.x86_64 kubelet-${KUBE_VERSION}-0.x86_64 kubernetes-cni-${KUBERNETES_CNI}-0.x86_64
 
 systemctl enable docker
 systemctl start docker
 
-KUBE_VERSION=1.10.2
-KUBERNETES_CNI=0.6.0
-KUBE_PAUSE_VERSION=3.1
-ETCD_VERSION=3.1.12
-DNS_VERSION=1.14.10
-FLANNEL_VERSION=0.10.0
-DEFAULT_BACKEND_VERSION=1.4
-NGINX_INGRESS_CONTROLLER_VERSION=0.14.0
-
-#Installing kubeadm, kubelet and kubectl
-yum install -y kubeadm-${KUBE_VERSION}-0.x86_64 \
-	kubectl-${KUBE_VERSION}-0.x86_64 \
-	kubelet-${KUBE_VERSION}-0.x86_64 \
-	kubernetes-cni-${KUBERNETES_CNI}-0.x86_64
-
-
-	
-
-systemctl daemon-reload
-systemctl enable kubelet
-systemctl start kubelet
-
-# Using kubeadm to Create a Cluster
-kubeadm reset
-kubeadm init --apiserver-advertise-address=$IPADDR --kubernetes-version=v$KUBE_VERSION --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors 'Swap' | tee k8s_for_CentOS.log
-
-
-
-----------------------------------------------	
-	
-	
-#Disabling SELinux
-setenforce 0
-
-#Some users on RHEL/CentOS 7 have reported issues with traffic being routed incorrectly due to iptables being bypassed.
-cat <<EOF >  /etc/sysctl.d/k8s.conf
-net.bridge.bridge-nf-call-ip6tables = 1
-net.bridge.bridge-nf-call-iptables = 1
-EOF
-sysctl --system
-
-#Configure cgroup driver used by kubelet on Master Node
-sed -i "s/cgroup-driver=systemd/cgroup-driver=cgroupfs/g" /etc/systemd/system/kubelet.service.d/10-kubeadm.conf	
-
-# Configure the base image of pod
-KUBEADM_CONF=/etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-result=$(cat $KUBEADM_CONF | grep 'KUBELET_EXTRA_ARGS=')
-if [ -n result ] ; then
-	KUBELET_EXTRA_ARGS="--fail-swap-on=false"
-	sed -i "/Environment=\"KUBELET_CERTIFICATE_ARGS/a\Environment=\"KUBELET_EXTRA_ARGS=--fail-swap-on=false\"" $KUBEADM_CONF
-fi
-
-systemctl daemon-reload
-systemctl enable kubelet
-systemctl start kubelet
-
-# Using kubeadm to Create a Cluster
-kubeadm reset
-kubeadm init --apiserver-advertise-address=$IPADDR --kubernetes-version=v$KUBE_VERSION --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors 'Swap' | tee k8s_for_CentOS.log
-
-#---------------------------------------------------------------------------
 GCR_URL=gcr.io/google_containers
 ALIYUN_URL="registry.cn-shenzhen.aliyuncs.com/eaglering"
 
@@ -146,6 +66,13 @@ for imageName in ${images[@]} ; do
   docker tag $ALIYUN_URL/$imageName $GCR_URL/$imageName
   docker rmi $ALIYUN_URL/$imageName
 done
+
+# Some users on RHEL/CentOS 7 have reported issues with traffic being routed incorrectly due to iptables being bypassed
+cat <<EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sysctl --system
 
 echo
 echo "Which type of server do you want?"
