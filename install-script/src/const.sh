@@ -1,0 +1,16 @@
+#!/bin/bash
+
+KUBE_VERSION=1.10.2
+KUBERNETES_CNI=0.6.0
+KUBE_PAUSE_VERSION=3.1
+ETCD_VERSION=3.1.12
+FLANNEL_VERSION=0.10.0
+CALICO_VERSION=3.1
+DEFAULT_BACKEND_VERSION=1.4
+
+GCR_URL=k8s.gcr.io
+ALIYUN_URL="registry.cn-shenzhen.aliyuncs.com/eaglering"
+
+FUNC_IS_INT() {
+	echo $1 | sed 's#[0-9]##g'
+}
