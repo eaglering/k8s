@@ -22,6 +22,7 @@ DOCKER_VERSION=18.06.1.ce
 PAUSE_VERSION=3.1
 ETCD_VERSION=3.2.24
 COREDNS_VERSION=1.2.6
+DEFAULTBACKEND_VERSION=1.4
 
 #系统配置
 systemctl stop firewalld
@@ -88,6 +89,7 @@ mirrorgooglecontainers/kube-scheduler-amd64:v${KUBERNETES_VERSION}
 mirrorgooglecontainers/kube-proxy-amd64:v${KUBERNETES_VERSION}
 mirrorgooglecontainers/pause:${PAUSE_VERSION}
 mirrorgooglecontainers/etcd-amd64:${ETCD_VERSION}
+mirrorgooglecontainers/defaultbackend:${DEFAULTBACKEND_VERSION}
 coredns/coredns:${COREDNS_VERSION})
 
 for image in ${images[@]} ; do
@@ -149,48 +151,64 @@ subjects:
 EOF
 kubectl create -f $K8S_DIR/conf/tiller-rbac-config.yaml
 helm init --service-account tiller --skip-refresh --upgrade -i registry.cn-shenzhen.aliyuncs.com/cnrancher/tiller:v2.12.0
-heml version
+helm repo update
 
 #安装ingress-nginx
 kubectl label node k8s-node1 node-role.kubernetes.io/edge=
-read -p "VIP address:" vip
 cat > $K8S_DIR/conf/ingress-nginx.yaml <<EOF
 controller:
   replicaCount: 1
-  service:
-    externalIPs:
-      - ${vip}
+  hostNetwork: true
   nodeSelector:
     node-role.kubernetes.io/edge: ''
-  affinity:
-    podAntiAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchExpressions:
-            - key: app 
-              operator: In
-              values:
-              - nginx-ingress
-            - key: component
-              operator: In
-              values:
-              - controller
-          topologyKey: kubernetes.io/hostname
   tolerations:
-      - key: node-role.kubernetes.io/master
-        operator: Exists
-        effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
 
 defaultBackend:
   nodeSelector:
     node-role.kubernetes.io/edge: ''
   tolerations:
-      - key: node-role.kubernetes.io/master
-        operator: Exists
-        effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
 EOF
-helm repo update
-helm install stable/nginx-ingress -n nginx-ingress --namespace ingress-nginx  -f $K8S_DIR/conf/ingress-nginx.yaml > $K8S_DIR/log/ingress-nginx.log
+helm install stable/nginx-ingress -n nginx-ingress --namespace ingress-nginx  -f $K8S_DIR/conf/nginx-ingress.yaml > $K8S_DIR/log/nginx-ingress.log
+
+#分配PV
+cat > $K8S_DIR/conf/pv.yaml <<EOF
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: data-nfs-server-provisioner-0
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /mnt/volumes/data-nfs-server-provisioner-0
+  claimRef:
+    namespace: kube-system
+    name: data-nfs-server-provisioner-0
+EOF
+kubectl apply -f $K8S_DIR/conf/pv.yaml
+
+#安装nfs-server
+cat > $K8S_DIR/conf/nfs-server-provisioner.yaml <<EOF
+persistence:
+  enabled: true
+  storageClass: "-"
+  size: 10Gi
+  
+storageClass:
+  defaultClass: true
+  
+nodeSelector:
+  kubernetes.io/hostname: k8s-node1
+EOF
+helm install stable/nfs-server-provisioner -n nfs-server-provisioner --namespace kube-system -f $K8S_DIR/conf/nfs-server-provisioner.yaml > $K8S_DIR/log/nfs-server-provisioner.log
 
 kubectl get pods --all-namespaces
 echo On slave:
