@@ -55,10 +55,10 @@ spec:
         - containerPort: 9000
           protocol: TCP
         volumeMounts:
-        - name: html
-          mountPath: /usr/share/nginx/html
+        - name: web
+          mountPath: /usr/share/nginx/web
       volumes:
-      - name: html
+      - name: web
         persistentVolumeClaim:
           claimName: webapp-pvc
       imagePullSecrets:
@@ -221,8 +221,9 @@ spec:
           mountPath: /var/run/docker.sock
         livenessProbe:
           httpGet:
+            scheme: HTTPS
             path: /healthz
-            port: 80
+            port: 15747
           initialDelaySeconds: 30
           timeoutSeconds: 30
       volumes:

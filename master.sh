@@ -45,6 +45,8 @@ EOF
 modprobe br_netfilter
 sysctl -p /etc/sysctl.d/k8s.conf
 
+yum -y install nfs-utils
+
 #kube-proxy开启ipvs的前置条件
 cat > /etc/sysconfig/modules/ipvs.modules <<EOF
 #!/bin/bash
