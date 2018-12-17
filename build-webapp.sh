@@ -96,23 +96,23 @@ data:
       access_log  /var/log/nginx/wing_frontend_access.log;
       error_log  /var/log/nginx/wing_frontend_error.log;
       location / {
-        try_files $uri $uri/ /index.php$args;
+        try_files \$uri \$uri/ /index.php\$args;
       }
-	  location /api {
-		rewrite ^/api/(.*)$ /api/index.php?$1 last;
-	  }
-      location ~ \.php$ {
+      location /api {
+        rewrite ^/api/(.*)\$ /api/index.php?\$1 last;
+      }
+      location ~ \.php\$ {
         fastcgi_pass   php72-fpm:9000;
         fastcgi_index  index.php;
-        fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+        fastcgi_param  SCRIPT_FILENAME  \$document_root\$fastcgi_script_name;
         include        fastcgi_params;
       }
       location ~ /\.(ht|svn|git) {
         deny all;
       }
     }
-	
-	server {
+    
+    server {
       listen       80;
       server_name  kf.fastapi.com.cn;
       root  /usr/share/nginx/web/wing/backend/web;
@@ -120,12 +120,12 @@ data:
       access_log  /var/log/nginx/wing_backend_access.log;
       error_log  /var/log/nginx/wing_backend_error.log;
       location / {
-        try_files $uri $uri/ /index.php$args;
+        try_files \$uri \$uri/ /index.php\$args;
       }
-      location ~ \.php$ {
+      location ~ \.php\$ {
         fastcgi_pass   php72-fpm:9000;
         fastcgi_index  index.php;
-        fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+        fastcgi_param  SCRIPT_FILENAME  \$document_root\$fastcgi_script_name;
         include        fastcgi_params;
       }
       location ~ /\.(ht|svn|git) {
@@ -187,7 +187,7 @@ spec:
     port: 80
     targetPort: 80
 EOF
-kubectl apply -f $K8S_DIR/nginx.yaml
+kubectl apply -f $K8S_DIR/conf/nginx.yaml
 
 #微服务
 cat > $K8S_DIR/conf/wing-sandbox.yaml <<EOF
