@@ -210,9 +210,11 @@ spec:
     spec:
       containers: 
       - name: wing-sandbox
-        image: registry-vpc.cn-shenzhen.aliyuncs.com/eaglering/wing-sandbox:v1.0.0
+        image: registry-vpc.cn-shenzhen.aliyuncs.com/eaglering/wing-sandbox:v2.0
         ports:
-        - containerPort: 80
+        - containerPort: 15746
+          protocol: TCP
+        - containerPort: 15747
           protocol: TCP
         volumeMounts:
         - name: docker-sock
@@ -241,9 +243,14 @@ spec:
   selector:
     app: wing-sandbox
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 80
+  - name: wing-sandbox-grpc
+    protocol: TCP
+    port: 15746
+    targetPort: 15746
+  - name: wing-sandbox-http
+    protocol: TCP
+    port: 15747
+    targetPort: 15747
 EOF
 kubectl apply -f $K8S_DIR/conf/wing-sandbox.yaml
 
